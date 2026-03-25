@@ -99,10 +99,9 @@ cd ~/Desktop
 Then download the project:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/sap-codebase-chat.git
+git clone https://github.com/Ananth170404/sap-codebase-chat.git
 ```
 
-> ⚠️ Replace `YOUR_USERNAME` with the actual GitHub username where the repo is hosted.
 
 Now enter the downloaded folder:
 
