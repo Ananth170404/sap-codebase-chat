@@ -26,6 +26,181 @@
 
 ---
 
+## 🍎 Running on a Mac — Complete Beginner's Guide
+
+> **No prior experience needed.** Follow these steps exactly, one at a time.  
+> Every command below is typed into the **Terminal** app on your Mac.
+
+---
+
+### How to open Terminal
+
+Press **⌘ Command + Space**, type `Terminal`, and press **Enter**.  
+A window will open where you type commands. Keep it open throughout all the steps below.
+
+---
+
+### Step 1 — Install Homebrew (Mac's package manager)
+
+Homebrew is a tool that makes installing developer software easy on a Mac.  
+Paste this entire line into Terminal and press **Enter**:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+> It may ask for your Mac login password. Type it and press Enter — nothing will show on screen while typing, that's normal.  
+> This takes about 2–5 minutes.
+
+---
+
+### Step 2 — Install Python
+
+```bash
+brew install python
+```
+
+Once done, confirm Python installed correctly:
+
+```bash
+python3 --version
+```
+
+You should see something like `Python 3.12.x` ✅
+
+---
+
+### Step 3 — Install Git
+
+Git is the tool used to download the project from GitHub.
+
+```bash
+brew install git
+```
+
+Confirm it installed:
+
+```bash
+git --version
+```
+
+You should see something like `git version 2.x.x` ✅
+
+---
+
+### Step 4 — Clone (download) the project to your Desktop
+
+First, navigate to your Desktop:
+
+```bash
+cd ~/Desktop
+```
+
+Then download the project:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/sap-codebase-chat.git
+```
+
+> ⚠️ Replace `YOUR_USERNAME` with the actual GitHub username where the repo is hosted.
+
+Now enter the downloaded folder:
+
+```bash
+cd sap-codebase-chat
+```
+
+---
+
+### Step 5 — Create a virtual environment
+
+A virtual environment keeps this project's packages neatly separated from the rest of your Mac.
+
+```bash
+python3 -m venv venv
+```
+
+Activate it:
+
+```bash
+source venv/bin/activate
+```
+
+> ✅ You'll know it worked when you see `(venv)` appear at the start of your Terminal prompt.
+
+---
+
+### Step 6 — Install the required packages
+
+```bash
+pip install -r requirements.txt
+```
+
+This downloads and installs Streamlit, the Gemini SDK, and everything else the app needs. Takes 1–2 minutes.
+
+---
+
+### Step 7 — Get your Gemini API Key
+
+1. Open your browser and go to **https://aistudio.google.com/app/apikey**
+2. Sign in with your Google account
+3. Click **Create API Key**
+4. Copy the key — it looks like `AIzaSyXXXXXXXX...`
+
+You'll paste it into the app in the next step — no need to save it anywhere yet.
+
+---
+
+### Step 8 — Run the app
+
+```bash
+streamlit run app.py
+```
+
+Your browser will automatically open at **http://localhost:8501** with the app running. 🎉
+
+---
+
+### Step 9 — Load your SAP project and start chatting
+
+1. Paste your **Gemini API key** in the sidebar on the left
+2. Choose **Upload ZIP File** to upload a zipped SAP project, or **Local Folder Path** to point to a folder on your Mac
+3. Click **Load Project**
+4. Type your question in the chat box at the bottom and press Enter
+
+---
+
+### Stopping the app
+
+Go back to Terminal and press **Control + C**.
+
+---
+
+### ▶️ Running the app again next time
+
+You don't need to redo all the setup steps. Each time you want to use the app, just run these 3 lines:
+
+```bash
+cd ~/Desktop/sap-codebase-chat
+source venv/bin/activate
+streamlit run app.py
+```
+
+---
+
+### 🛠️ Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `command not found: brew` | Redo Step 1 |
+| `command not found: python3` | Redo Step 2 |
+| `(venv)` not showing in prompt | Run `source venv/bin/activate` again |
+| Browser doesn't open automatically | Manually go to **http://localhost:8501** |
+| `ModuleNotFoundError` on run | Make sure `(venv)` is active, then redo Step 6 |
+| Gemini API error | Double-check you pasted the full API key in the sidebar |
+
+---
+
 ## 🏗️ Architecture
 
 ```
@@ -56,7 +231,7 @@
 ### Why no vector database?
 
 SAP CPI projects are typically small enough to fit inside Gemini's
-**1 million token** context window directly.  Loading everything at once is
+**1 million token** context window directly. Loading everything at once is
 simpler *and* more accurate (no chunking artefacts, no retrieval misses).
 
 For extremely large enterprise repositories you can add a RAG layer —
@@ -64,38 +239,35 @@ see [Contributing](#-contributing).
 
 ---
 
-## 🚀 Quickstart
+## 🚀 Quickstart (Windows / Advanced Users)
 
-### 1 — Prerequisites
+### Prerequisites
 
 - Python 3.10 or newer
 - A **Google Gemini API key** → [Get one free at Google AI Studio](https://aistudio.google.com/app/apikey)
 
-### 2 — Install
+### Install
 
 ```bash
-# Clone the repo
 git clone https://github.com/<your-org>/sap-codebase-chat.git
 cd sap-codebase-chat
 
-# Create a virtual environment (recommended)
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
 
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3 — Configure (optional)
+### Configure (optional)
 
 ```bash
 cp .env.example .env
 # Edit .env and paste your Gemini API key
 ```
 
-You can also paste the key directly in the sidebar — no `.env` needed.
+You can also paste the key directly in the sidebar — no `.env` file needed.
 
-### 4 — Run
+### Run
 
 ```bash
 streamlit run app.py
@@ -110,7 +282,7 @@ The app opens at **http://localhost:8501**.
 ### Loading a project
 
 **Option A – Upload ZIP**
-1. Zip your unzipped SAP project folder.
+1. Zip your SAP project folder.
 2. In the sidebar choose *Upload ZIP File* and upload it.
 3. Click **Load Project**.
 
