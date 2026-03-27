@@ -6,7 +6,7 @@ import io
 from pathlib import Path
 from PIL import Image
 
-import google.generativeai as genai
+from google import genai
 from file_processor import (
     build_codebase_context,
     build_directory_tree,
@@ -86,11 +86,7 @@ def load_project(root_path: str):
 
 
 def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) -> str:
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        system_instruction=st.session_state.system_prompt,
-    )
+    client = genai.Client(api_key=api_key)
 
     # Rebuild conversation history (excluding last user message)
     history = []
@@ -103,7 +99,11 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
         parts.append(msg["content"])
         history.append({"role": role, "parts": parts})
 
-    chat = model.start_chat(history=history)
+    chat = client.chats.create(
+        model="gemini-2.5-flash",
+        config={"system_instruction": st.session_state.system_prompt},
+        history=history,
+    )
 
     # Current message parts
     parts = []
@@ -111,7 +111,7 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
         parts.append(Image.open(io.BytesIO(image_bytes)))
     parts.append(prompt)
 
-    response = chat.send_message(parts)
+    response = chat.send_message(message=parts)
     return response.text
 
 
