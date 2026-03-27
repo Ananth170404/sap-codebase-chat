@@ -96,7 +96,7 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
         if msg.get("image_bytes"):
             img = Image.open(io.BytesIO(msg["image_bytes"]))
             parts.append(img)
-        parts.append(msg["content"])
+        parts.append({"text": msg["content"]})
         history.append({"role": role, "parts": parts})
 
     chat = client.chats.create(
@@ -109,7 +109,7 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
     parts = []
     if image_bytes:
         parts.append(Image.open(io.BytesIO(image_bytes)))
-    parts.append(prompt)
+    parts.append({"text": prompt})
 
     response = chat.send_message(message=parts)
     return response.text
