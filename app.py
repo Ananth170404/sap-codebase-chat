@@ -86,6 +86,8 @@ def load_project(root_path: str):
 
 
 def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) -> str:
+    from google.genai import types
+
     client = genai.Client(api_key=api_key)
 
     # Rebuild conversation history (excluding last user message)
@@ -94,26 +96,34 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
         role = "user" if msg["role"] == "user" else "model"
         parts = []
         if msg.get("image_bytes"):
-            img = Image.open(io.BytesIO(msg["image_bytes"]))
-            parts.append(img)
-        parts.append({"text": msg["content"]})
-        history.append({"role": role, "parts": parts})
+            parts.append(
+                types.Part.from_bytes(
+                    data=msg["image_bytes"],
+                    mime_type="image/jpeg"
+                )
+            )
+        parts.append(types.Part.from_text(text=msg["content"]))
+        history.append(types.Content(role=role, parts=parts))
 
     chat = client.chats.create(
-        model="gemini-2.5-flash",
-        config={"system_instruction": st.session_state.system_prompt},
+        model="gemini-2.0-flash",
+        config=types.GenerateContentConfig(
+            system_instruction=st.session_state.system_prompt
+        ),
         history=history,
     )
 
-    # Current message parts
-    parts = []
+    # Current message
     if image_bytes:
-        parts.append(Image.open(io.BytesIO(image_bytes)))
-    parts.append({"text": prompt})
+        message = [
+            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+            types.Part.from_text(text=prompt),
+        ]
+    else:
+        message = prompt
 
-    response = chat.send_message(message=parts)
+    response = chat.send_message(message=message)
     return response.text
-
 
 # ─────────────────────────────────────────────────────────────────
 # Sidebar
