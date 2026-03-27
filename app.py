@@ -106,7 +106,7 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
         history.append(types.Content(role=role, parts=parts))
 
     chat = client.chats.create(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         config=types.GenerateContentConfig(
             system_instruction=st.session_state.system_prompt
         ),
