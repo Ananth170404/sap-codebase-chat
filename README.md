@@ -6,7 +6,7 @@
 
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.35%2B-red)
-![Gemini](https://img.shields.io/badge/Google%20Gemini-2.0%20Flash-orange)
+![Gemini](https://img.shields.io/badge/Google%20Gemini-2.5%20Flash-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
@@ -220,7 +220,7 @@ streamlit run app.py
              │  context string (up to ~225 k tokens)
              ▼
 ┌────────────────────────────────────────────────────────────┐
-│              Google Gemini 2.0 Flash API                   │
+│              Google Gemini 2.5 Flash API                   │
 │  • 1 M token context window                                │
 │  • Multimodal (text + images)                              │
 │  • Stateful multi-turn chat                                │
