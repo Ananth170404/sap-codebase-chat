@@ -24,32 +24,80 @@ def isolated_db(tmp_path, monkeypatch):
     return test_engine
 
 
+@pytest.fixture()
+def owner_id(isolated_db):
+    """A ready-made owner for tests that only care about project/message
+    behavior, not the identity of the owner itself."""
+    return db_module.create_guest_user().id
+
+
+# ─────────────────────────────────────────────────────────────────
+# get_or_create_user / create_guest_user
+# ─────────────────────────────────────────────────────────────────
+
+
+def test_get_or_create_user_creates_new_user(isolated_db):
+    user = db_module.get_or_create_user("alice@example.com", display_name="Alice")
+
+    assert user.id is not None
+    assert user.email == "alice@example.com"
+    assert user.display_name == "Alice"
+    assert user.is_guest is False
+
+
+def test_get_or_create_user_reuses_existing_by_email(isolated_db):
+    first = db_module.get_or_create_user("alice@example.com")
+    second = db_module.get_or_create_user("alice@example.com")
+
+    assert second.id == first.id
+
+
+def test_create_guest_user_is_unique_each_call(isolated_db):
+    guest1 = db_module.create_guest_user()
+    guest2 = db_module.create_guest_user()
+
+    assert guest1.id != guest2.id
+    assert guest1.is_guest is True
+    assert guest1.email is None
+
+
 # ─────────────────────────────────────────────────────────────────
 # get_or_create_project
 # ─────────────────────────────────────────────────────────────────
 
 
-def test_get_or_create_project_creates_new_project(isolated_db):
-    project = db_module.get_or_create_project("MyProject.zip", {".py": 3})
+def test_get_or_create_project_creates_new_project(owner_id):
+    project = db_module.get_or_create_project(owner_id, "MyProject.zip", {".py": 3})
 
     assert project.id is not None
+    assert project.owner_id == owner_id
     assert project.name == "MyProject.zip"
     assert project.file_summary_json == '{".py": 3}'
 
 
-def test_get_or_create_project_reuses_existing_by_name(isolated_db):
-    first = db_module.get_or_create_project("MyProject.zip", {".py": 3})
-    second = db_module.get_or_create_project("MyProject.zip", {".py": 5})
+def test_get_or_create_project_reuses_existing_by_name(owner_id):
+    first = db_module.get_or_create_project(owner_id, "MyProject.zip", {".py": 3})
+    second = db_module.get_or_create_project(owner_id, "MyProject.zip", {".py": 5})
 
     assert second.id == first.id
     assert second.file_summary_json == '{".py": 5}'  # refreshed on reload
 
 
-def test_get_or_create_project_different_names_are_different_projects(isolated_db):
-    first = db_module.get_or_create_project("ProjectA", {})
-    second = db_module.get_or_create_project("ProjectB", {})
+def test_get_or_create_project_different_names_are_different_projects(owner_id):
+    first = db_module.get_or_create_project(owner_id, "ProjectA", {})
+    second = db_module.get_or_create_project(owner_id, "ProjectB", {})
 
     assert first.id != second.id
+
+
+def test_get_or_create_project_same_name_different_owners_do_not_collide(isolated_db):
+    alice = db_module.get_or_create_user("alice@example.com")
+    bob = db_module.get_or_create_user("bob@example.com")
+
+    alice_project = db_module.get_or_create_project(alice.id, "SharedName", {})
+    bob_project = db_module.get_or_create_project(bob.id, "SharedName", {})
+
+    assert alice_project.id != bob_project.id
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -57,8 +105,8 @@ def test_get_or_create_project_different_names_are_different_projects(isolated_d
 # ─────────────────────────────────────────────────────────────────
 
 
-def test_add_message_and_get_messages_round_trip(isolated_db):
-    project = db_module.get_or_create_project("Proj", {})
+def test_add_message_and_get_messages_round_trip(owner_id):
+    project = db_module.get_or_create_project(owner_id, "Proj", {})
 
     db_module.add_message(project.id, "user", "hello")
     db_module.add_message(project.id, "assistant", "hi there")
@@ -69,8 +117,8 @@ def test_add_message_and_get_messages_round_trip(isolated_db):
     assert [m.content for m in messages] == ["hello", "hi there"]
 
 
-def test_get_messages_are_ordered_by_creation(isolated_db):
-    project = db_module.get_or_create_project("Proj", {})
+def test_get_messages_are_ordered_by_creation(owner_id):
+    project = db_module.get_or_create_project(owner_id, "Proj", {})
     for i in range(5):
         db_module.add_message(project.id, "user", f"msg {i}")
 
@@ -79,9 +127,9 @@ def test_get_messages_are_ordered_by_creation(isolated_db):
     assert [m.content for m in messages] == [f"msg {i}" for i in range(5)]
 
 
-def test_get_messages_isolated_per_project(isolated_db):
-    project_a = db_module.get_or_create_project("ProjectA", {})
-    project_b = db_module.get_or_create_project("ProjectB", {})
+def test_get_messages_isolated_per_project(owner_id):
+    project_a = db_module.get_or_create_project(owner_id, "ProjectA", {})
+    project_b = db_module.get_or_create_project(owner_id, "ProjectB", {})
 
     db_module.add_message(project_a.id, "user", "for A")
     db_module.add_message(project_b.id, "user", "for B")
@@ -99,8 +147,8 @@ def test_get_messages_empty_for_unknown_project(isolated_db):
 # ─────────────────────────────────────────────────────────────────
 
 
-def test_clear_messages_deletes_rows(isolated_db):
-    project = db_module.get_or_create_project("Proj", {})
+def test_clear_messages_deletes_rows(owner_id):
+    project = db_module.get_or_create_project(owner_id, "Proj", {})
     db_module.add_message(project.id, "user", "hello")
 
     db_module.clear_messages(project.id)
@@ -108,8 +156,8 @@ def test_clear_messages_deletes_rows(isolated_db):
     assert db_module.get_messages(project.id) == []
 
 
-def test_clear_messages_removes_on_disk_images(isolated_db):
-    project = db_module.get_or_create_project("Proj", {})
+def test_clear_messages_removes_on_disk_images(owner_id):
+    project = db_module.get_or_create_project(owner_id, "Proj", {})
     image_path = db_module.save_image(b"\x89PNG\r\n\x1a\n", project.id)
     db_module.add_message(project.id, "user", "see attached", image_path)
 
@@ -120,9 +168,9 @@ def test_clear_messages_removes_on_disk_images(isolated_db):
     assert not db_module.Path(image_path).exists()
 
 
-def test_clear_messages_only_affects_its_own_project(isolated_db):
-    project_a = db_module.get_or_create_project("ProjectA", {})
-    project_b = db_module.get_or_create_project("ProjectB", {})
+def test_clear_messages_only_affects_its_own_project(owner_id):
+    project_a = db_module.get_or_create_project(owner_id, "ProjectA", {})
+    project_b = db_module.get_or_create_project(owner_id, "ProjectB", {})
     db_module.add_message(project_a.id, "user", "for A")
     db_module.add_message(project_b.id, "user", "for B")
 

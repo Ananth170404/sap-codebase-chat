@@ -27,8 +27,17 @@ _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite"
 engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 
 
+class User(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    email: str | None = Field(default=None, index=True, unique=True)
+    display_name: str | None = None
+    is_guest: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class Project(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    owner_id: int = Field(foreign_key="user.id", index=True)
     name: str = Field(index=True)
     loaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     file_summary_json: str = "{}"
@@ -48,14 +57,48 @@ def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
 
 
-def get_or_create_project(name: str, file_summary: dict[str, int]) -> Project:
-    """Reuse the most recent project row with this name — loading the same
-    project again (including after a restart) resumes its history instead
-    of starting a new, blank one."""
+def get_or_create_user(email: str, display_name: str | None = None) -> User:
+    """Look up a signed-in user by email (from the OIDC identity), or
+    create their row on first login."""
+    with Session(engine) as session:
+        existing = session.exec(select(User).where(User.email == email)).first()
+        if existing:
+            return existing
+
+        user = User(email=email, display_name=display_name, is_guest=False)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return user
+
+
+def create_guest_user() -> User:
+    """Create a fresh, unauthenticated identity for one guest session.
+
+    Guests get a real User row (so they reuse the exact same owner_id
+    scoping as signed-in users — no special-cased queries) but it's never
+    looked up again by anything durable, so a guest can't come back later
+    and resume: that's the actual meaning of "guest," not an oversight.
+    """
+    with Session(engine) as session:
+        user = User(email=None, display_name="Guest", is_guest=True)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return user
+
+
+def get_or_create_project(owner_id: int, name: str, file_summary: dict[str, int]) -> Project:
+    """Reuse the most recent project row with this name *for this owner* —
+    loading the same project again (including after a restart) resumes its
+    history instead of starting a new, blank one. Scoping by owner_id keeps
+    two different users' identically-named projects from colliding."""
     summary_json = json.dumps(file_summary)
     with Session(engine) as session:
         existing = session.exec(
-            select(Project).where(Project.name == name).order_by(Project.loaded_at.desc())
+            select(Project)
+            .where(Project.owner_id == owner_id, Project.name == name)
+            .order_by(Project.loaded_at.desc())
         ).first()
         if existing:
             existing.loaded_at = datetime.now(timezone.utc)
@@ -65,7 +108,7 @@ def get_or_create_project(name: str, file_summary: dict[str, int]) -> Project:
             session.refresh(existing)
             return existing
 
-        project = Project(name=name, file_summary_json=summary_json)
+        project = Project(owner_id=owner_id, name=name, file_summary_json=summary_json)
         session.add(project)
         session.commit()
         session.refresh(project)

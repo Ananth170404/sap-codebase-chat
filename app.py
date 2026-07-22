@@ -10,8 +10,10 @@ from db import (
     add_message,
     clear_messages,
     create_db_and_tables,
+    create_guest_user,
     get_messages,
     get_or_create_project,
+    get_or_create_user,
     save_image,
 )
 from file_processor import (
@@ -36,6 +38,9 @@ create_db_and_tables()
 # Session-state defaults
 # ─────────────────────────────────────────────────────────────────
 for key in [
+    "user_id",
+    "user_label",
+    "is_guest",
     "project_id",
     "codebase_context",
     "directory_tree",
@@ -49,6 +54,64 @@ for key in [
 
 if st.session_state.chat_history is None:
     st.session_state.chat_history = []
+
+
+# ─────────────────────────────────────────────────────────────────
+# Auth gate — Google sign-in or guest (Phase 2)
+# ─────────────────────────────────────────────────────────────────
+# st.user.is_logged_in raises unless an [auth] section exists in secrets.toml
+# at all (not just "nobody's logged in yet"), so every access is guarded by
+# this instead of relying on st.user's own default. st.secrets itself raises
+# if no secrets.toml file exists at all (fresh clone, guest-only usage).
+try:
+    GOOGLE_AUTH_CONFIGURED = "auth" in st.secrets
+except Exception:
+    GOOGLE_AUTH_CONFIGURED = False
+
+
+def do_logout():
+    if GOOGLE_AUTH_CONFIGURED and st.user.is_logged_in:
+        st.logout()
+    st.session_state.user_id = None
+    st.session_state.user_label = None
+    st.session_state.is_guest = None
+    st.session_state.project_id = None
+    st.session_state.codebase_context = None
+    st.session_state.chat_history = []
+
+
+if st.session_state.user_id is None:
+    if GOOGLE_AUTH_CONFIGURED and st.user.is_logged_in:
+        # Just redirected back from Google — resolve to a durable User row.
+        user = get_or_create_user(email=st.user.email, display_name=getattr(st.user, "name", None))
+        st.session_state.user_id = user.id
+        st.session_state.user_label = user.display_name or user.email
+        st.session_state.is_guest = False
+        st.rerun()
+
+    st.title("🔍 SAP Codebase Chat")
+    st.write(
+        "Sign in to keep your projects and chat history across visits, "
+        "or continue as a guest — guest chats are saved for this session "
+        "only and can't be resumed later, since there's no account to tie them to."
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if GOOGLE_AUTH_CONFIGURED:
+            st.button("🔐 Sign in with Google", on_click=st.login, use_container_width=True)
+        else:
+            st.button("🔐 Sign in with Google", disabled=True, use_container_width=True)
+            st.caption("Not configured — see `.streamlit/secrets.toml.example`.")
+    with col2:
+        if st.button("👤 Continue as Guest", use_container_width=True):
+            guest = create_guest_user()
+            st.session_state.user_id = guest.id
+            st.session_state.user_label = "Guest"
+            st.session_state.is_guest = True
+            st.rerun()
+
+    st.stop()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -92,7 +155,7 @@ def load_project(root_path: str, project_name: str):
         tree = build_directory_tree(root_path)
         summary = get_file_type_summary(root_path)
 
-    project = get_or_create_project(project_name, summary)
+    project = get_or_create_project(st.session_state.user_id, project_name, summary)
     history = [
         {"role": m.role, "content": m.content, "image_path": m.image_path}
         for m in get_messages(project.id)
@@ -152,6 +215,10 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
 with st.sidebar:
     st.title("🔍 SAP Codebase Chat")
     st.caption("Powered by Google Gemini")
+
+    icon = "👤" if st.session_state.is_guest else "🔐"
+    st.caption(f"{icon} Signed in as **{st.session_state.user_label}**")
+    st.button("Log out", on_click=do_logout)
 
     st.divider()
     st.header("⚙️ API Key")
