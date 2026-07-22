@@ -1,10 +1,19 @@
 import os
 import tempfile
 import zipfile
+from pathlib import Path
 
 import streamlit as st
 from google import genai
 
+from db import (
+    add_message,
+    clear_messages,
+    create_db_and_tables,
+    get_messages,
+    get_or_create_project,
+    save_image,
+)
 from file_processor import (
     build_codebase_context,
     build_directory_tree,
@@ -21,10 +30,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+create_db_and_tables()
+
 # ─────────────────────────────────────────────────────────────────
 # Session-state defaults
 # ─────────────────────────────────────────────────────────────────
 for key in [
+    "project_id",
     "codebase_context",
     "directory_tree",
     "file_summary",
@@ -72,23 +84,31 @@ When answering:
 """
 
 
-def load_project(root_path: str):
-    """Read the project and store everything in session state."""
+def load_project(root_path: str, project_name: str):
+    """Read the project, resume (or create) its DB record + chat history,
+    and store everything in session state."""
     with st.spinner("🔍 Reading files and building codebase context …"):
         context, image_files = build_codebase_context(root_path)
         tree = build_directory_tree(root_path)
         summary = get_file_type_summary(root_path)
 
+    project = get_or_create_project(project_name, summary)
+    history = [
+        {"role": m.role, "content": m.content, "image_path": m.image_path}
+        for m in get_messages(project.id)
+    ]
+
+    st.session_state.project_id = project.id
     st.session_state.codebase_context = context
     st.session_state.image_files = image_files
     st.session_state.directory_tree = tree
     st.session_state.file_summary = summary
-    st.session_state.chat_history = []
+    st.session_state.chat_history = history
     st.session_state.system_prompt = build_system_prompt(context)
 
     char_count = len(context)
     token_est = char_count // 4
-    return char_count, token_est
+    return char_count, token_est, len(history)
 
 
 def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) -> str:
@@ -101,8 +121,9 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
     for msg in st.session_state.chat_history[:-1]:
         role = "user" if msg["role"] == "user" else "model"
         parts = []
-        if msg.get("image_bytes"):
-            parts.append(types.Part.from_bytes(data=msg["image_bytes"], mime_type="image/jpeg"))
+        if msg.get("image_path"):
+            image_bytes_hist = Path(msg["image_path"]).read_bytes()
+            parts.append(types.Part.from_bytes(data=image_bytes_hist, mime_type="image/jpeg"))
         parts.append(types.Part.from_text(text=msg["content"]))
         history.append(types.Content(role=role, parts=parts))
 
@@ -161,8 +182,11 @@ with st.sidebar:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(tmpdir)
             os.remove(zip_path)
-            chars, tokens = load_project(tmpdir)
-            st.success(f"✅ Loaded! ~{tokens:,} tokens of context.")
+            # Identify the project by its original filename (not the random
+            # tmpdir path) so re-uploading the same ZIP resumes its history.
+            chars, tokens, resumed = load_project(tmpdir, project_name=uploaded_zip.name)
+            resumed_note = f" Resumed {resumed} previous message(s)." if resumed else ""
+            st.success(f"✅ Loaded! ~{tokens:,} tokens of context.{resumed_note}")
 
     else:
         folder_path = st.text_input(
@@ -171,8 +195,10 @@ with st.sidebar:
         )
         if folder_path and st.button("🚀 Load Project", type="primary"):
             if os.path.isdir(folder_path):
-                chars, tokens = load_project(folder_path)
-                st.success(f"✅ Loaded! ~{tokens:,} tokens of context.")
+                # The absolute path is a stable identity across reloads.
+                chars, tokens, resumed = load_project(folder_path, project_name=folder_path)
+                resumed_note = f" Resumed {resumed} previous message(s)." if resumed else ""
+                st.success(f"✅ Loaded! ~{tokens:,} tokens of context.{resumed_note}")
             else:
                 st.error("Folder not found. Please check the path.")
 
@@ -188,6 +214,8 @@ with st.sidebar:
                 st.text(f"  {ext or '(no ext)':15s} {count:>3} file(s)")
 
         if st.button("🗑️ Clear Chat"):
+            if st.session_state.project_id:
+                clear_messages(st.session_state.project_id)
             st.session_state.chat_history = []
             st.rerun()
 
@@ -212,8 +240,8 @@ if not api_key:
 for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        if msg.get("image_bytes"):
-            st.image(msg["image_bytes"], width=400)
+        if msg.get("image_path"):
+            st.image(msg["image_path"], width=400)
 
 # Image attachment (above the input bar)
 attached_image = st.file_uploader(
@@ -226,24 +254,33 @@ attached_image = st.file_uploader(
 # Chat input
 if prompt := st.chat_input("Ask about the codebase…  e.g. 'Explain the overall integration flow'"):
     img_bytes = attached_image.read() if attached_image else None
+    image_path = None
+    if img_bytes:
+        suffix = Path(attached_image.name).suffix or ".png"
+        image_path = save_image(img_bytes, st.session_state.project_id, suffix=suffix)
 
-    # Record user message
-    user_msg = {"role": "user", "content": prompt, "image_bytes": img_bytes}
+    # Record + persist user message
+    user_msg = {"role": "user", "content": prompt, "image_path": image_path}
     st.session_state.chat_history.append(user_msg)
+    add_message(st.session_state.project_id, "user", prompt, image_path)
 
     with st.chat_message("user"):
         st.markdown(prompt)
-        if img_bytes:
-            st.image(img_bytes, width=400)
+        if image_path:
+            st.image(image_path, width=400)
 
-    # Generate and display response
+    # Generate, display, and persist the response
     with st.chat_message("assistant"):
         with st.spinner("Thinking …"):
             try:
                 answer = get_gemini_response(api_key, prompt, img_bytes)
                 st.markdown(answer)
-                st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                assistant_msg = {"role": "assistant", "content": answer, "image_path": None}
+                st.session_state.chat_history.append(assistant_msg)
+                add_message(st.session_state.project_id, "assistant", answer)
             except Exception as exc:
                 err = f"❌ Gemini API error: {exc}"
                 st.error(err)
-                st.session_state.chat_history.append({"role": "assistant", "content": err})
+                assistant_msg = {"role": "assistant", "content": err, "image_path": None}
+                st.session_state.chat_history.append(assistant_msg)
+                add_message(st.session_state.project_id, "assistant", err)
