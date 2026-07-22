@@ -1,12 +1,10 @@
-import streamlit as st
 import os
-import zipfile
 import tempfile
-import io
-from pathlib import Path
-from PIL import Image
+import zipfile
 
+import streamlit as st
 from google import genai
+
 from file_processor import (
     build_codebase_context,
     build_directory_tree,
@@ -26,13 +24,20 @@ st.set_page_config(
 # ─────────────────────────────────────────────────────────────────
 # Session-state defaults
 # ─────────────────────────────────────────────────────────────────
-for key in ["codebase_context", "directory_tree", "file_summary",
-            "image_files", "chat_history", "system_prompt"]:
+for key in [
+    "codebase_context",
+    "directory_tree",
+    "file_summary",
+    "image_files",
+    "chat_history",
+    "system_prompt",
+]:
     if key not in st.session_state:
         st.session_state[key] = None
 
 if st.session_state.chat_history is None:
     st.session_state.chat_history = []
+
 
 # ─────────────────────────────────────────────────────────────────
 # Helpers
@@ -57,7 +62,8 @@ When answering:
   2. Explain SAP-specific concepts clearly for the audience level inferred from the question.
   3. Map out the data flow / integration flow end-to-end when asked.
   4. Proactively flag potential issues, anti-patterns, or improvements.
-  5. If given an image, analyse it in the context of this codebase (e.g. a screenshot of an error, a flow diagram, etc.).
+  5. If given an image, analyse it in the context of this codebase
+     (e.g. a screenshot of an error, a flow diagram, etc.).
   6. Keep answers structured with headers, bullet points, and code blocks.
 
 ═══════════════════════  CODEBASE  ═══════════════════════
@@ -96,20 +102,13 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
         role = "user" if msg["role"] == "user" else "model"
         parts = []
         if msg.get("image_bytes"):
-            parts.append(
-                types.Part.from_bytes(
-                    data=msg["image_bytes"],
-                    mime_type="image/jpeg"
-                )
-            )
+            parts.append(types.Part.from_bytes(data=msg["image_bytes"], mime_type="image/jpeg"))
         parts.append(types.Part.from_text(text=msg["content"]))
         history.append(types.Content(role=role, parts=parts))
 
     chat = client.chats.create(
         model="gemini-2.5-flash",
-        config=types.GenerateContentConfig(
-            system_instruction=st.session_state.system_prompt
-        ),
+        config=types.GenerateContentConfig(system_instruction=st.session_state.system_prompt),
         history=history,
     )
 
@@ -124,6 +123,7 @@ def get_gemini_response(api_key: str, prompt: str, image_bytes: bytes | None) ->
 
     response = chat.send_message(message=message)
     return response.text
+
 
 # ─────────────────────────────────────────────────────────────────
 # Sidebar
@@ -242,12 +242,8 @@ if prompt := st.chat_input("Ask about the codebase…  e.g. 'Explain the overall
             try:
                 answer = get_gemini_response(api_key, prompt, img_bytes)
                 st.markdown(answer)
-                st.session_state.chat_history.append(
-                    {"role": "assistant", "content": answer}
-                )
+                st.session_state.chat_history.append({"role": "assistant", "content": answer})
             except Exception as exc:
                 err = f"❌ Gemini API error: {exc}"
                 st.error(err)
-                st.session_state.chat_history.append(
-                    {"role": "assistant", "content": err}
-                )
+                st.session_state.chat_history.append({"role": "assistant", "content": err})

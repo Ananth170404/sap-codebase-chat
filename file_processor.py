@@ -9,10 +9,8 @@ programming files.
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from collections import defaultdict
-from typing import Tuple  # noqa: F401 – kept for IDE hints on older Pythons
+from pathlib import Path
 
 # ─────────────────────────────────────────────────────────────────
 # File-type configuration
@@ -21,12 +19,12 @@ from typing import Tuple  # noqa: F401 – kept for IDE hints on older Pythons
 # Files we try to read as UTF-8 text
 TEXT_EXTENSIONS: set[str] = {
     # SAP CPI / Integration Suite
-    ".iflw",        # Integration Flow (BPMN/XML)
-    ".prop",        # Properties
-    ".propdef",     # Property definitions
-    ".mf",          # Manifest (MANIFEST.MF)
+    ".iflw",  # Integration Flow (BPMN/XML)
+    ".prop",  # Properties
+    ".propdef",  # Property definitions
+    ".mf",  # Manifest (MANIFEST.MF)
     # Scripting
-    ".groovy",      # Groovy scripts (very common in SAP CPI)
+    ".groovy",  # Groovy scripts (very common in SAP CPI)
     ".java",
     ".js",
     ".ts",
@@ -57,7 +55,7 @@ TEXT_EXTENSIONS: set[str] = {
     # Build
     ".gradle",
     ".pom",
-        ".project",      # Eclipse / SAP project file (often no ext inside .project)
+    ".project",  # Eclipse / SAP project file (often no ext inside .project)
     ".classpath",
     # SQL
     ".sql",
@@ -69,49 +67,60 @@ TEXT_EXTENSIONS: set[str] = {
 
 # Extension -> human-readable language label (for markdown code fences)
 LANG_MAP: dict[str, str] = {
-    ".iflw":      "xml",
-    ".xml":       "xml",
-    ".xsd":       "xml",
-    ".wsdl":      "xml",
-    ".xsl":       "xml",
-    ".xslt":      "xml",
-    ".groovy":    "groovy",
-    ".java":      "java",
-    ".js":        "javascript",
-    ".ts":        "typescript",
-    ".py":        "python",
-    ".sh":        "bash",
-    ".bat":       "batch",
-    ".json":      "json",
-    ".yaml":      "yaml",
-    ".yml":       "yaml",
-    ".toml":      "toml",
-    ".sql":       "sql",
-    ".html":      "html",
-    ".css":       "css",
-    ".md":        "markdown",
-    ".gradle":    "groovy",
+    ".iflw": "xml",
+    ".xml": "xml",
+    ".xsd": "xml",
+    ".wsdl": "xml",
+    ".xsl": "xml",
+    ".xslt": "xml",
+    ".groovy": "groovy",
+    ".java": "java",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".py": "python",
+    ".sh": "bash",
+    ".bat": "batch",
+    ".json": "json",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".toml": "toml",
+    ".sql": "sql",
+    ".html": "html",
+    ".css": "css",
+    ".md": "markdown",
+    ".gradle": "groovy",
 }
 
 # Images we read as binary (passed to Gemini vision when user attaches them)
 IMAGE_EXTENSIONS: set[str] = {
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".svg",
 }
 
 # Files / dirs to skip silently
 SKIP_NAMES: set[str] = {
-    ".git", ".svn", ".hg",
-    "__pycache__", "node_modules", ".DS_Store",
+    ".git",
+    ".svn",
+    ".hg",
+    "__pycache__",
+    "node_modules",
+    ".DS_Store",
     "Thumbs.db",
 }
 
-MAX_FILE_SIZE_BYTES = 500_000   # 500 KB – skip very large binary-ish files
-MAX_CONTEXT_CHARS   = 900_000   # ~225 k tokens – stay under Gemini's 1 M limit
+MAX_FILE_SIZE_BYTES = 500_000  # 500 KB – skip very large binary-ish files
+MAX_CONTEXT_CHARS = 900_000  # ~225 k tokens – stay under Gemini's 1 M limit
 
 
 # ─────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────
+
 
 def build_directory_tree(root_path: str) -> str:
     """Return a pretty-printed directory tree string."""
@@ -213,12 +222,7 @@ def build_codebase_context(root_path: str) -> tuple[str, dict[str, bytes]]:
             content = f"[Could not read file: {exc}]"
 
         lang = LANG_MAP.get(ext, "")
-        block = (
-            f"\n### 📄 `{rel}`\n"
-            f"```{lang}\n"
-            f"{content.strip()}\n"
-            f"```\n"
-        )
+        block = f"\n### 📄 `{rel}`\n" f"```{lang}\n" f"{content.strip()}\n" f"```\n"
 
         # ── Context-size guard ────────────────────────────────────
         if total_chars + len(block) > MAX_CONTEXT_CHARS:
@@ -229,18 +233,13 @@ def build_codebase_context(root_path: str) -> tuple[str, dict[str, bytes]]:
         total_chars += len(block)
 
     # Assemble final context
-    header = (
-        "## 🗂️ Project Directory Structure\n"
-        f"```\n{tree}\n```\n\n"
-        "## 📁 File Contents\n"
-    )
+    header = "## 🗂️ Project Directory Structure\n" f"```\n{tree}\n```\n\n" "## 📁 File Contents\n"
     footer = ""
     if skipped:
         footer = (
             "\n\n---\n"
             f"⚠️ The following {len(skipped)} file(s) were skipped "
-            "(too large or context limit reached):\n"
-            + "\n".join(f"  - {s}" for s in skipped)
+            "(too large or context limit reached):\n" + "\n".join(f"  - {s}" for s in skipped)
         )
 
     context = header + "".join(parts) + footer
