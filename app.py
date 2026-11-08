@@ -4,6 +4,7 @@ import zipfile
 from pathlib import Path
 
 import streamlit as st
+from dotenv import load_dotenv
 from google import genai
 
 from db import (
@@ -21,6 +22,9 @@ from file_processor import (
     build_directory_tree,
     get_file_type_summary,
 )
+from redaction import scrub_secrets
+
+load_dotenv()
 
 # ─────────────────────────────────────────────────────────────────
 # Page config
@@ -346,7 +350,7 @@ if prompt := st.chat_input("Ask about the codebase…  e.g. 'Explain the overall
                 st.session_state.chat_history.append(assistant_msg)
                 add_message(st.session_state.project_id, "assistant", answer)
             except Exception as exc:
-                err = f"❌ Gemini API error: {exc}"
+                err = scrub_secrets(f"❌ Gemini API error: {exc}", api_key)
                 st.error(err)
                 assistant_msg = {"role": "assistant", "content": err, "image_path": None}
                 st.session_state.chat_history.append(assistant_msg)
